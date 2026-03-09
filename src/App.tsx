@@ -174,14 +174,51 @@ function App() {
     setActiveId(snippet.id)
   }
 
-  const handleSearchKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault()
-      void handleCopyActive()
-    } else if (event.key === 'Escape') {
-      window.ipcRenderer.send('hide-window')
+  // Raccourcis clavier globaux (navigation + copie + fermeture)
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      const isTypingTarget =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+
+      // Ne perturbe pas la saisie dans les formulaires d'édition
+      if (detailMode !== 'view' && isTypingTarget) return
+
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        window.ipcRenderer.send('hide-window')
+        return
+      }
+
+      if (event.key === 'Enter') {
+        // Copie le snippet actif
+        event.preventDefault()
+        void handleCopyActive()
+        return
+      }
+
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        // Navigation dans la liste
+        if (filtered.length === 0) return
+        event.preventDefault()
+        const currentIndex = activeId ? filtered.findIndex((s) => s.id === activeId) : -1
+        let nextIndex = currentIndex
+        if (event.key === 'ArrowDown') {
+          nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % filtered.length
+        } else {
+          nextIndex =
+            currentIndex < 0 ? filtered.length - 1 : (currentIndex - 1 + filtered.length) % filtered.length
+        }
+        setActiveId(filtered[nextIndex].id)
+      }
     }
-  }
+
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [filtered, activeId, detailMode, handleCopyActive])
 
   const toggleFavorite = async (id: string) => {
     const updated = snippets.map((s) =>
@@ -250,6 +287,8 @@ function App() {
 
   const deleteActiveSnippet = async () => {
     if (!activeSnippet) return
+    const ok = window.confirm(`Supprimer le snippet "${activeSnippet.name}" ?`)
+    if (!ok) return
     const next = snippets.filter((s) => s.id !== activeSnippet.id)
     await persistSnippets(next)
     if (next.length > 0) {
@@ -387,7 +426,6 @@ function App() {
               placeholder="Search snippets, tags, or code… "
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
               autoFocus
             />
             <span className="kbd">⌘K</span>
