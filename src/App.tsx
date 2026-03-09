@@ -8,6 +8,9 @@ type Snippet = {
   language: string
   tags: string[]
   code: string
+  favorite?: boolean
+  notes?: string
+  createdAt?: string
 }
 
 const FALLBACK_SNIPPETS: Snippet[] = [
@@ -109,12 +112,16 @@ git branch --merged main | egrep -v '(^\\*|main)' | xargs -r git branch -d
   },
 ]
 
+type ViewMode = 'view' | 'edit' | 'new'
+
 function App() {
   const [query, setQuery] = useState('')
   const [snippets, setSnippets] = useState<Snippet[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<ViewMode>('view')
+  const [draft, setDraft] = useState<Snippet | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -145,6 +152,16 @@ function App() {
       cancelled = true
     }
   }, [])
+
+  const persistSnippets = async (next: Snippet[]) => {
+    setSnippets(next)
+    try {
+      await window.ipcRenderer.invoke('save-snippets', next)
+    } catch (err) {
+      console.error("Erreur lors de l'enregistrement des snippets", err)
+      setError('Impossible de sauvegarder les snippets localement.')
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -187,6 +204,80 @@ function App() {
   }
 
   const activeSnippet = filtered[selectedIndex] ?? filtered[0]
+
+  const beginNewSnippet = () => {
+    const now = new Date().toISOString()
+    const base: Snippet = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`,
+      name: '',
+      description: '',
+      language: '',
+      tags: [],
+      code: '',
+      createdAt: now,
+      favorite: false,
+      notes: '',
+    }
+    setDraft(base)
+    setViewMode('new')
+  }
+
+  const beginEditSnippet = () => {
+    if (!activeSnippet) return
+    setDraft({ ...activeSnippet })
+    setViewMode('edit')
+  }
+
+  const cancelEdit = () => {
+    setDraft(null)
+    setViewMode('view')
+  }
+
+  const commitDraft = async () => {
+    if (!draft) return
+    const cleaned: Snippet = {
+      ...draft,
+      name: draft.name.trim(),
+      description: draft.description.trim(),
+      language: draft.language.trim(),
+      tags: (draft.tags ?? []).map((t) => t.trim()).filter(Boolean),
+      code: draft.code,
+    }
+
+    if (!cleaned.name || !cleaned.code) {
+      setError('Nom et code sont obligatoires pour un snippet.')
+      return
+    }
+
+    let next: Snippet[]
+    if (viewMode === 'new') {
+      next = [cleaned, ...snippets]
+      setSelectedIndex(0)
+    } else {
+      next = snippets.map((s) => (s.id === cleaned.id ? cleaned : s))
+    }
+
+    await persistSnippets(next)
+    setViewMode('view')
+    setDraft(null)
+  }
+
+  const toggleFavorite = async () => {
+    if (!activeSnippet) return
+    const updated = snippets.map((s) =>
+      s.id === activeSnippet.id ? { ...s, favorite: !s.favorite } : s,
+    )
+    await persistSnippets(updated)
+  }
+
+  const handleDelete = async () => {
+    if (!activeSnippet) return
+    const remaining = snippets.filter((s) => s.id !== activeSnippet.id)
+    await persistSnippets(remaining)
+    setViewMode('view')
+    setDraft(null)
+    setSelectedIndex(0)
+  }
 
   return (
     <div className='app-root'>
@@ -255,7 +346,7 @@ function App() {
           </section>
 
           <aside className='detail-pane' aria-label='Détail du snippet'>
-            {activeSnippet ? (
+            {viewMode === 'view' && activeSnippet && (
               <>
                 <div className='detail-header'>
                   <div>
@@ -264,24 +355,124 @@ function App() {
                       {activeSnippet.language} · {activeSnippet.tags.join(' · ')}
                     </p>
                   </div>
+                  <div className='detail-actions'>
+                    <button type='button' className='btn-secondary' onClick={toggleFavorite}>
+                      {activeSnippet.favorite ? '★ Favori' : '☆ Favori'}
+                    </button>
+                    <button type='button' className='btn-primary' onClick={beginEditSnippet}>
+                      Editer
+                    </button>
+                  </div>
                 </div>
                 <div className='code-block'>
                   <pre>
                     <code>{activeSnippet.code}</code>
                   </pre>
                 </div>
-                <p className='detail-note'>
-                  Entrée ou clic pour copier le code dans ton presse-papier. Échap pour masquer Snippet Vault.
-                </p>
+                {activeSnippet.notes && (
+                  <p className='detail-note'>{activeSnippet.notes}</p>
+                )}
+                <div className='detail-footer-row'>
+                  <button type='button' className='btn-danger' onClick={handleDelete}>
+                    Supprimer le snippet
+                  </button>
+                </div>
               </>
-            ) : (
+            )}
+
+            {(viewMode === 'edit' || viewMode === 'new') && draft && (
+              <form
+                className='snippet-form'
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void commitDraft()
+                }}
+              >
+                <div className='form-row'>
+                  <label>
+                    <span>Nom</span>
+                    <input
+                      value={draft.name}
+                      onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                    />
+                  </label>
+                </div>
+                <div className='form-row'>
+                  <label>
+                    <span>Langage</span>
+                    <input
+                      value={draft.language}
+                      onChange={(e) => setDraft({ ...draft, language: e.target.value })}
+                    />
+                  </label>
+                </div>
+                <div className='form-row'>
+                  <label>
+                    <span>Tags (séparés par des virgules)</span>
+                    <input
+                      value={draft.tags.join(', ')}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          tags: e.target.value.split(',').map((t) => t.trim()),
+                        })
+                      }
+                    />
+                  </label>
+                </div>
+                <div className='form-row'>
+                  <label>
+                    <span>Description</span>
+                    <input
+                      value={draft.description}
+                      onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                    />
+                  </label>
+                </div>
+                <div className='form-row'>
+                  <label>
+                    <span>Notes</span>
+                    <textarea
+                      rows={3}
+                      value={draft.notes ?? ''}
+                      onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+                    />
+                  </label>
+                </div>
+                <div className='form-row'>
+                  <label className='form-code-label'>
+                    <span>Code</span>
+                    <textarea
+                      className='form-code'
+                      rows={8}
+                      value={draft.code}
+                      onChange={(e) => setDraft({ ...draft, code: e.target.value })}
+                    />
+                  </label>
+                </div>
+                <div className='form-actions'>
+                  <button type='button' className='btn-secondary' onClick={cancelEdit}>
+                    Annuler
+                  </button>
+                  <button type='submit' className='btn-primary'>
+                    Enregistrer
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {viewMode === 'view' && !activeSnippet && (
               <div className='status-text'>Sélectionne un snippet pour prévisualiser le code.</div>
             )}
           </aside>
         </main>
 
         <footer className='footer'>
-          <span className='footer-text'>↑↓ pour naviguer · Entrée pour copier</span>
+          <div className='footer-left'>
+            <button type='button' className='btn-primary' onClick={beginNewSnippet}>
+              + Nouveau snippet
+            </button>
+          </div>
           <span className='footer-status'>
             <span className='status-dot' />
             Vault actif

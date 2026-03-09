@@ -23,6 +23,7 @@ process.env.APP_ROOT = path.join(__dirname, '../..')
 export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
 export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 export const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
+const SNIPPETS_PATH = path.join(process.env.APP_ROOT, 'snippets.json')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   ? path.join(process.env.APP_ROOT, 'public')
@@ -113,9 +114,8 @@ async function registerShortcuts() {
 
 ipcMain.handle('get-snippets', async () => {
   const fs = await import('node:fs/promises')
-  const snippetsPath = path.join(process.env.APP_ROOT, 'snippets.json')
   try {
-    const raw = await fs.readFile(snippetsPath, 'utf-8')
+    const raw = await fs.readFile(SNIPPETS_PATH, 'utf-8')
     const parsed = JSON.parse(raw)
     if (Array.isArray(parsed)) return parsed
     return []
@@ -123,6 +123,19 @@ ipcMain.handle('get-snippets', async () => {
     // eslint-disable-next-line no-console
     console.error('Erreur lors de la lecture du fichier snippets.json', error)
     return []
+  }
+})
+
+ipcMain.handle('save-snippets', async (_, snippets: unknown) => {
+  const fs = await import('node:fs/promises')
+  try {
+    const json = JSON.stringify(snippets, null, 2)
+    await fs.writeFile(SNIPPETS_PATH, json, 'utf-8')
+    return { ok: true }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Erreur lors de l’écriture du fichier snippets.json', error)
+    return { ok: false }
   }
 })
 
