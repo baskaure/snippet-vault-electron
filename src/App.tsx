@@ -13,129 +13,52 @@ type Snippet = {
   createdAt?: string
 }
 
-const FALLBACK_SNIPPETS: Snippet[] = [
-  {
-    id: 'react-fetch-hook',
-    name: 'React Fetch Hook',
-    description: 'Hook pour requêtes avec états de chargement/erreur.',
-    language: 'TypeScript',
-    tags: ['react', 'hooks', 'fetch'],
-    code: `import { useEffect, useState } from 'react'
-
-type Status = 'idle' | 'loading' | 'success' | 'error'
-
-export function useFetch<T>(url: string, options?: RequestInit) {
-  const [data, setData] = useState<T | null>(null)
-  const [status, setStatus] = useState<Status>('idle')
-  const [error, setError] = useState<Error | null>(null)
-
-  useEffect(() => {
-    if (!url) return
-    let cancelled = false
-
-    async function run() {
-      try {
-        setStatus('loading')
-        const res = await fetch(url, options)
-        if (!res.ok) throw new Error(\`Request failed: \${res.status}\`)
-        const json = (await res.json()) as T
-        if (!cancelled) {
-          setData(json)
-          setStatus('success')
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err as Error)
-          setStatus('error')
-        }
-      }
-    }
-
-    run()
-    return () => {
-      cancelled = true
-    }
-  }, [url, options])
-
-  return { data, status, error }
-}
-`,
-  },
-  {
-    id: 'center-div-css',
-    name: 'Center Div',
-    description: 'Centrer un bloc au milieu de la page.',
-    language: 'CSS',
-    tags: ['css', 'layout'],
-    code: `.centered {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-}`,
-  },
-  {
-    id: 'sql-connection-pool',
-    name: 'SQL Connection Pool',
-    description: 'Pool de connexions PostgreSQL avec node-postgres.',
-    language: 'SQL / Node.js',
-    tags: ['sql', 'postgres', 'node'],
-    code: `import { Pool } from 'pg'
-
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 10,
-  idleTimeoutMillis: 30_000,
-})
-
-export async function query<T = unknown>(text: string, params?: unknown[]) {
-  const client = await pool.connect()
-  try {
-    const res = await client.query<T>(text, params)
-    return res.rows
-  } finally {
-    client.release()
-  }
-}
-`,
-  },
-  {
-    id: 'git-clean-branches',
-    name: 'Git Clean Branches',
-    description: 'Supprime les branches locales mergées sur main.',
-    language: 'Shell',
-    tags: ['git', 'cli'],
-    code: `git checkout main
-git pull
-git branch --merged main | egrep -v '(^\\*|main)' | xargs -r git branch -d
-`,
-  },
-]
-
-type ViewMode = 'view' | 'edit' | 'new'
 type SidebarFilter = 'all' | 'favorites' | 'recent'
 
-function mapLanguageForHighlight(lang: string): string {
-  const normalized = lang.toLowerCase()
-  if (normalized.includes('typescript') || normalized === 'ts' || normalized.includes('tsx')) return 'typescript'
-  if (normalized.includes('javascript') || normalized === 'js' || normalized.includes('react')) return 'javascript'
-  if (normalized.includes('sql')) return 'sql'
-  if (normalized.includes('css')) return 'css'
-  if (normalized.includes('shell') || normalized.includes('bash')) return 'bash'
-  if (normalized.includes('json')) return 'json'
-  return 'plaintext'
+type TopFilter = 'latest' | 'shared' | 'personal' | 'untagged'
+
+type DetailMode = 'view' | 'edit' | 'new'
+
+function languageIconClass(language: string): string {
+  const lower = language.toLowerCase()
+  if (lower.includes('typescript') || lower.includes('tsx')) return 'icon-ts'
+  if (lower.includes('javascript') || lower.includes('js')) return 'icon-js'
+  if (lower.includes('css')) return 'icon-css'
+  if (lower.includes('sql') || lower.includes('db') || lower.includes('prisma')) return 'icon-db'
+  return 'icon-ts'
+}
+
+function languageIconLabel(language: string): string {
+  const lower = language.toLowerCase()
+  if (lower.includes('typescript') || lower.includes('tsx')) return '</>'
+  if (lower.includes('javascript') || lower.includes('js')) return 'JS'
+  if (lower.includes('css')) return 'CSS'
+  if (lower.includes('sql') || lower.includes('db') || lower.includes('prisma')) return '🗄'
+  return '</>'
+}
+
+function formatCreatedAt(value?: string): string {
+  if (!value) return 'Local snippet'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Local snippet'
+  return date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+  })
 }
 
 function App() {
-  const [query, setQuery] = useState('')
   const [snippets, setSnippets] = useState<Snippet[]>([])
-  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [query, setQuery] = useState('')
+  const [sidebarFilter, setSidebarFilter] = useState<SidebarFilter>('all')
+  const [topFilter, setTopFilter] = useState<TopFilter>('latest')
+  const [languageFilter, setLanguageFilter] = useState<string>('all')
+  const [activeId, setActiveId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<ViewMode>('view')
+  const [detailMode, setDetailMode] = useState<DetailMode>('view')
   const [draft, setDraft] = useState<Snippet | null>(null)
-  const [sidebarFilter, setSidebarFilter] = useState<SidebarFilter>('all')
-  const [languageFilter, setLanguageFilter] = useState<string>('all')
 
   useEffect(() => {
     let cancelled = false
@@ -145,16 +68,17 @@ function App() {
         setIsLoading(true)
         const result = (await window.ipcRenderer.invoke('get-snippets')) as Snippet[] | undefined
         if (cancelled) return
-        if (Array.isArray(result) && result.length > 0) {
+        if (Array.isArray(result)) {
           setSnippets(result)
+          if (result.length > 0) setActiveId(result[0].id)
         } else {
-          setSnippets(FALLBACK_SNIPPETS)
+          setSnippets([])
         }
       } catch (err) {
         console.error('Erreur lors du chargement des snippets', err)
         if (!cancelled) {
-          setError("Impossible de charger le fichier local. Utilisation des snippets par défaut.")
-          setSnippets(FALLBACK_SNIPPETS)
+          setError("Impossible de charger les snippets locaux.")
+          setSnippets([])
         }
       } finally {
         if (!cancelled) setIsLoading(false)
@@ -173,15 +97,14 @@ function App() {
       await window.ipcRenderer.invoke('save-snippets', next)
     } catch (err) {
       console.error("Erreur lors de l'enregistrement des snippets", err)
-      setError('Impossible de sauvegarder les snippets localement.')
+      setError("Impossible de sauvegarder les snippets localement.")
     }
   }
 
   const languages = useMemo(() => {
     const counts = new Map<string, number>()
     for (const snippet of snippets) {
-      if (!snippet.language) continue
-      const key = snippet.language
+      const key = snippet.language || 'Unknown'
       counts.set(key, (counts.get(key) ?? 0) + 1)
     }
     return Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]))
@@ -193,7 +116,7 @@ function App() {
     if (sidebarFilter === 'favorites') {
       base = base.filter((s) => s.favorite)
     } else if (sidebarFilter === 'recent') {
-      base = [...base].sort((a, b) => {
+      base.sort((a, b) => {
         const da = a.createdAt ? new Date(a.createdAt).getTime() : 0
         const db = b.createdAt ? new Date(b.createdAt).getTime() : 0
         return db - da
@@ -206,88 +129,72 @@ function App() {
     }
 
     const q = query.trim().toLowerCase()
-    if (!q) return base
+    if (q) {
+      base = base.filter((snippet) => {
+        const haystack = `${snippet.name} ${snippet.description} ${snippet.language} ${snippet.tags.join(
+          ' ',
+        )}`.toLowerCase()
+        return haystack.includes(q)
+      })
+    }
 
-    return base.filter((snippet) => {
-      const haystack =
-        `${snippet.name} ${snippet.description} ${snippet.language} ${snippet.tags.join(' ')}`.toLowerCase()
-      return haystack.includes(q)
-    })
-  }, [query, snippets, sidebarFilter, languageFilter])
+    if (topFilter === 'untagged') {
+      base = base.filter((s) => !s.tags || s.tags.length === 0)
+    }
+
+    return base
+  }, [snippets, sidebarFilter, languageFilter, query, topFilter])
+
+  const activeSnippet = useMemo(() => {
+    if (filtered.length === 0) return undefined
+    if (!activeId) return filtered[0]
+    const match = filtered.find((s) => s.id === activeId)
+    return match ?? filtered[0]
+  }, [filtered, activeId])
 
   useEffect(() => {
-    setSelectedIndex(0)
-  }, [query, filtered.length])
+    if (!activeSnippet) {
+      setActiveId(null)
+      return
+    }
+    setActiveId((prev) => prev ?? activeSnippet.id)
+  }, [activeSnippet])
 
-  const handleCopy = async (index: number) => {
-    const snippet = filtered[index]
-    if (!snippet) return
+  const handleCopyActive = async () => {
+    if (!activeSnippet) return
     try {
-      await window.ipcRenderer.invoke('copy-snippet-to-clipboard', snippet.code)
+      await window.ipcRenderer.invoke('copy-snippet-to-clipboard', activeSnippet.code)
     } catch (err) {
       console.error('Erreur lors de la copie du snippet', err)
       setError("Impossible de copier dans le presse-papier.")
     }
   }
 
-  const handleKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (event) => {
-    if (event.key === 'ArrowDown') {
+  const handleCardClick = (snippet: Snippet) => {
+    setActiveId(snippet.id)
+  }
+
+  const handleSearchKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (event) => {
+    if (event.key === 'Enter') {
       event.preventDefault()
-      setSelectedIndex((prev) => (prev + 1) % Math.max(filtered.length, 1))
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault()
-      setSelectedIndex((prev) => (prev - 1 + Math.max(filtered.length, 1)) % Math.max(filtered.length, 1))
-    } else if (event.key === 'Enter') {
-      event.preventDefault()
-      handleCopy(selectedIndex)
+      void handleCopyActive()
     } else if (event.key === 'Escape') {
       window.ipcRenderer.send('hide-window')
     }
   }
 
-  const activeSnippet = filtered[selectedIndex] ?? filtered[0]
-
-  const highlightedCode = useMemo(() => {
-    if (!activeSnippet) return ''
-    try {
-      const language = activeSnippet.language ? mapLanguageForHighlight(activeSnippet.language) : ''
-      const code = activeSnippet.code ?? ''
-      // Simple "highlighting": indent and escape HTML without external lib
-      const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      if (!language) return escaped
-      // Bold some common keywords by language
-      const kw = language.toLowerCase()
-      if (kw === 'typescript' || kw === 'javascript') {
-        return escaped.replace(
-          /\b(const|let|function|return|async|await|export|import|from)\b/g,
-          '<span class="hljs-keyword">$1</span>',
-        )
-      }
-      if (kw === 'sql') {
-        return escaped.replace(
-          /\b(SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|DELETE|JOIN)\b/gi,
-          '<span class="hljs-keyword">$1</span>',
-        )
-      }
-      if (kw === 'css') {
-        return escaped.replace(
-          /\b(display|flex|justify-content|align-items|background|color)\b/g,
-          '<span class="hljs-attr">$1</span>',
-        )
-      }
-      return escaped
-    } catch {
-      return (activeSnippet.code ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-    }
-  }, [activeSnippet])
+  const toggleFavorite = async () => {
+    if (!activeSnippet) return
+    const updated = snippets.map((s) =>
+      s.id === activeSnippet.id ? { ...s, favorite: !s.favorite } : s,
+    )
+    await persistSnippets(updated)
+  }
 
   const beginNewSnippet = () => {
     const now = new Date().toISOString()
     const base: Snippet = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`,
+      id: globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `${Date.now()}`,
       name: '',
       description: '',
       language: '',
@@ -298,18 +205,19 @@ function App() {
       notes: '',
     }
     setDraft(base)
-    setViewMode('new')
+    setDetailMode('new')
+    setActiveId(base.id)
   }
 
   const beginEditSnippet = () => {
     if (!activeSnippet) return
     setDraft({ ...activeSnippet })
-    setViewMode('edit')
+    setDetailMode('edit')
   }
 
   const cancelEdit = () => {
+    setDetailMode('view')
     setDraft(null)
-    setViewMode('view')
   }
 
   const commitDraft = async () => {
@@ -329,305 +237,475 @@ function App() {
     }
 
     let next: Snippet[]
-    if (viewMode === 'new') {
+    if (detailMode === 'new') {
       next = [cleaned, ...snippets]
-      setSelectedIndex(0)
     } else {
       next = snippets.map((s) => (s.id === cleaned.id ? cleaned : s))
     }
 
     await persistSnippets(next)
-    setViewMode('view')
+    setActiveId(cleaned.id)
+    setDetailMode('view')
     setDraft(null)
-  }
-
-  const toggleFavorite = async () => {
-    if (!activeSnippet) return
-    const updated = snippets.map((s) =>
-      s.id === activeSnippet.id ? { ...s, favorite: !s.favorite } : s,
-    )
-    await persistSnippets(updated)
-  }
-
-  const handleDelete = async () => {
-    if (!activeSnippet) return
-    const remaining = snippets.filter((s) => s.id !== activeSnippet.id)
-    await persistSnippets(remaining)
-    setViewMode('view')
-    setDraft(null)
-    setSelectedIndex(0)
   }
 
   return (
-    <div className='app-root'>
-      <div className='spotlight-shell'>
-        <header className='spotlight-header'>
-          <div className='app-badge'>SV</div>
-          <div className='search-shell'>
-            <span className='search-icon' aria-hidden='true'>
-              ⌕
-            </span>
-            <input
-              autoFocus
-              className='search-input'
-              placeholder='Search snippets, tags, or code…'
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={handleKeyDown}
-            />
-            <div className='shortcut-hint'>
-              <span className='kbd'>Ctrl</span>
-              <span className='kbd'>+</span>
-              <span className='kbd'>Shift</span>
-              <span className='kbd'>S</span>
-            </div>
+    <div className="app-root">
+      {/* SIDEBAR */}
+      <aside className="sidebar">
+        <div className="logo">
+          <div className="logo-icon">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#fff"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+            >
+              <polyline points="16 18 22 12 16 6" />
+              <polyline points="8 6 2 12 8 18" />
+            </svg>
           </div>
-        </header>
-
-        <div className='body-layout'>
-          <aside className='sidebar'>
-            <div className='sidebar-header'>
-              <span className='sidebar-title'>Snippet Vault</span>
-            </div>
-
-            <nav className='sidebar-nav'>
-              <button
-                type='button'
-                className={`nav-item ${sidebarFilter === 'all' ? 'nav-item--active' : ''}`}
-                onClick={() => setSidebarFilter('all')}
-              >
-                <span>Tous les snippets</span>
-              </button>
-              <button
-                type='button'
-                className={`nav-item ${sidebarFilter === 'favorites' ? 'nav-item--active' : ''}`}
-                onClick={() => setSidebarFilter('favorites')}
-              >
-                <span>Favoris</span>
-              </button>
-              <button
-                type='button'
-                className={`nav-item ${sidebarFilter === 'recent' ? 'nav-item--active' : ''}`}
-                onClick={() => setSidebarFilter('recent')}
-              >
-                <span>Récents</span>
-              </button>
-            </nav>
-
-            <div className='sidebar-section'>
-              <div className='sidebar-section-title'>LANGAGES</div>
-              <button
-                type='button'
-                className={`nav-item nav-item--small ${languageFilter === 'all' ? 'nav-item--active' : ''}`}
-                onClick={() => setLanguageFilter('all')}
-              >
-                <span>Tous</span>
-                <span className='badge-count'>{snippets.length}</span>
-              </button>
-              {languages.map(([lang, count]) => (
-                <button
-                  key={lang}
-                  type='button'
-                  className={`nav-item nav-item--small ${
-                    languageFilter === lang ? 'nav-item--active' : ''
-                  }`}
-                  onClick={() => setLanguageFilter(lang)}
-                >
-                  <span>{lang}</span>
-                  <span className='badge-count'>{count}</span>
-                </button>
-              ))}
-            </div>
-          </aside>
-
-          <main className='content'>
-            <section className='list-pane' aria-label='Résultats des snippets'>
-            {isLoading && (
-              <div className='status-text'>Chargement des snippets…</div>
-            )}
-
-            {!isLoading && filtered.length === 0 && (
-              <div className='status-text'>Aucun snippet ne correspond à ta recherche.</div>
-            )}
-
-            {!isLoading &&
-              filtered.map((snippet, index) => {
-                const isActive = index === selectedIndex
-                return (
-                  <button
-                    key={snippet.id}
-                    type='button'
-                    className={`snippet-item ${isActive ? 'snippet-item--active' : ''}`}
-                    onMouseEnter={() => setSelectedIndex(index)}
-                    onClick={() => handleCopy(index)}
-                  >
-                    <div className='snippet-main'>
-                      <div className='snippet-title-row'>
-                        <span className='snippet-name'>{snippet.name}</span>
-                        <span className='snippet-language'>{snippet.language}</span>
-                      </div>
-                      <p className='snippet-description'>{snippet.description}</p>
-                    </div>
-                    <div className='snippet-tags'>
-                      {snippet.tags.map((tag) => (
-                        <span key={tag} className='tag-pill'>
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </button>
-                )
-              })}
-            </section>
-
-            <aside className='detail-pane' aria-label='Détail du snippet'>
-            {viewMode === 'view' && activeSnippet && (
-              <>
-                <div className='detail-header'>
-                  <div>
-                    <h2 className='detail-title'>{activeSnippet.name}</h2>
-                    <p className='detail-meta'>
-                      {activeSnippet.language} · {activeSnippet.tags.join(' · ')}
-                    </p>
-                  </div>
-                  <div className='detail-actions'>
-                    <button type='button' className='btn-secondary' onClick={toggleFavorite}>
-                      {activeSnippet.favorite ? '★ Favori' : '☆ Favori'}
-                    </button>
-                    <button type='button' className='btn-primary' onClick={beginEditSnippet}>
-                      Editer
-                    </button>
-                  </div>
-                </div>
-                <div className='code-block'>
-                  <pre>
-                    <code
-                      className='hljs'
-                      dangerouslySetInnerHTML={{ __html: highlightedCode || activeSnippet.code }}
-                    />
-                  </pre>
-                </div>
-                {activeSnippet.notes && (
-                  <p className='detail-note'>{activeSnippet.notes}</p>
-                )}
-                <div className='detail-footer-row'>
-                  <button type='button' className='btn-danger' onClick={handleDelete}>
-                    Supprimer le snippet
-                  </button>
-                </div>
-              </>
-            )}
-
-            {(viewMode === 'edit' || viewMode === 'new') && draft && (
-              <form
-                className='snippet-form'
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  void commitDraft()
-                }}
-              >
-                <div className='form-row'>
-                  <label>
-                    <span>Nom</span>
-                    <input
-                      value={draft.name}
-                      onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                    />
-                  </label>
-                </div>
-                <div className='form-row'>
-                  <label>
-                    <span>Langage</span>
-                    <input
-                      value={draft.language}
-                      onChange={(e) => setDraft({ ...draft, language: e.target.value })}
-                    />
-                  </label>
-                </div>
-                <div className='form-row'>
-                  <label>
-                    <span>Tags (séparés par des virgules)</span>
-                    <input
-                      value={draft.tags.join(', ')}
-                      onChange={(e) =>
-                        setDraft({
-                          ...draft,
-                          tags: e.target.value.split(',').map((t) => t.trim()),
-                        })
-                      }
-                    />
-                  </label>
-                </div>
-                <div className='form-row'>
-                  <label>
-                    <span>Description</span>
-                    <input
-                      value={draft.description}
-                      onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                    />
-                  </label>
-                </div>
-                <div className='form-row'>
-                  <label>
-                    <span>Notes</span>
-                    <textarea
-                      rows={3}
-                      value={draft.notes ?? ''}
-                      onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
-                    />
-                  </label>
-                </div>
-                <div className='form-row'>
-                  <label className='form-code-label'>
-                    <span>Code</span>
-                    <textarea
-                      className='form-code'
-                      rows={8}
-                      value={draft.code}
-                      onChange={(e) => setDraft({ ...draft, code: e.target.value })}
-                    />
-                  </label>
-                </div>
-                <div className='form-actions'>
-                  <button type='button' className='btn-secondary' onClick={cancelEdit}>
-                    Annuler
-                  </button>
-                  <button type='submit' className='btn-primary'>
-                    Enregistrer
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {viewMode === 'view' && !activeSnippet && (
-              <div className='status-text'>Sélectionne un snippet pour prévisualiser le code.</div>
-            )}
-          </aside>
-        </main>
+          Snippet Vault
         </div>
 
-        <footer className='footer'>
-          <div className='footer-left'>
-            <button type='button' className='btn-primary' onClick={beginNewSnippet}>
-              + Nouveau snippet
-            </button>
-          </div>
-          <div className='footer-center'>
-            <span className='kbd'>Entrée</span>
-            <span className='footer-hint-text'>Copier</span>
-            <span className='kbd'>↑↓</span>
-            <span className='footer-hint-text'>Naviguer</span>
-            <span className='kbd'>Esc</span>
-            <span className='footer-hint-text'>Fermer</span>
-          </div>
-          <span className='footer-status'>
-            <span className='status-dot' />
-            Vault actif
-          </span>
-        </footer>
+        <nav className="nav-section">
+          <button
+            type="button"
+            className={`nav-item ${sidebarFilter === 'all' ? 'active' : ''}`}
+            onClick={() => setSidebarFilter('all')}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+            </svg>
+            All Snippets
+          </button>
+          <button
+            type="button"
+            className={`nav-item ${sidebarFilter === 'favorites' ? 'active' : ''}`}
+            onClick={() => setSidebarFilter('favorites')}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+            Favorites
+          </button>
+          <button
+            type="button"
+            className={`nav-item ${sidebarFilter === 'recent' ? 'active' : ''}`}
+            onClick={() => setSidebarFilter('recent')}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            Recent
+          </button>
+        </nav>
 
-        {error && <div className='error-banner'>{error}</div>}
-      </div>
+        <div className="section-label">Languages</div>
+        <button
+          type="button"
+          className={`lang-item ${languageFilter === 'all' ? 'active' : ''}`}
+          onClick={() => setLanguageFilter('all')}
+        >
+          <span className="lang-dot" style={{ background: '#f5c842' }} />
+          All
+          <span className="lang-count">{snippets.length}</span>
+        </button>
+        {languages.map(([lang, count]) => (
+          <button
+            key={lang}
+            type="button"
+            className={`lang-item ${languageFilter === lang ? 'active' : ''}`}
+            onClick={() => setLanguageFilter(lang)}
+          >
+            <span className="lang-dot" />
+            {lang}
+            <span className="lang-count">{count}</span>
+          </button>
+        ))}
+
+        <button className="new-btn" type="button" onClick={beginNewSnippet}>
+          + New Snippet
+        </button>
+      </aside>
+
+      {/* MAIN */}
+      <main className="main">
+        <div className="topbar">
+          <div className="search-wrap">
+            <span className="search-icon">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </span>
+            <input
+              type="text"
+              placeholder="Search snippets, tags, or code… "
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              autoFocus
+            />
+            <span className="kbd">⌘K</span>
+          </div>
+        </div>
+
+        <div className="filters-bar">
+          <span className="filters-label">Filters:</span>
+          <button
+            type="button"
+            className={`filter-chip ${topFilter === 'latest' ? 'active' : ''}`}
+            onClick={() => setTopFilter('latest')}
+          >
+            Latest
+          </button>
+          <button
+            type="button"
+            className={`filter-chip ${topFilter === 'shared' ? 'active' : ''}`}
+            onClick={() => setTopFilter('shared')}
+          >
+            Shared
+          </button>
+          <button
+            type="button"
+            className={`filter-chip ${topFilter === 'personal' ? 'active' : ''}`}
+            onClick={() => setTopFilter('personal')}
+          >
+            Personal
+          </button>
+          <button
+            type="button"
+            className={`filter-chip ${topFilter === 'untagged' ? 'active' : ''}`}
+            onClick={() => setTopFilter('untagged')}
+          >
+            Untagged
+          </button>
+        </div>
+
+        <div className="grid-area">
+          {isLoading && <div className="status-text">Chargement des snippets…</div>}
+          {!isLoading && filtered.length === 0 && (
+            <div className="status-text">Aucun snippet ne correspond à ta recherche.</div>
+          )}
+          <div className="snippet-grid">
+            {filtered.map((snippet) => {
+              const isActive = activeSnippet?.id === snippet.id
+              const iconClass = languageIconClass(snippet.language)
+              const iconLabel = languageIconLabel(snippet.language)
+              const preview =
+                snippet.code.length > 200 ? `${snippet.code.slice(0, 200)}…` : snippet.code
+
+              return (
+                <button
+                  type="button"
+                  key={snippet.id}
+                  className={`card ${isActive ? 'active' : ''}`}
+                  onClick={() => handleCardClick(snippet)}
+                >
+                  <div className="card-header">
+                    <div className={`card-lang-icon ${iconClass}`}>{iconLabel}</div>
+                    <div className="card-title-wrap">
+                      <div className="card-title">{snippet.name}</div>
+                      <div className="card-lang">{snippet.language}</div>
+                    </div>
+                    <button
+                      type="button"
+                      className={`star-btn ${snippet.favorite ? 'starred' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setActiveId(snippet.id)
+                        void toggleFavorite()
+                      }}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill={snippet.favorite ? 'currentColor' : 'none'}
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                      >
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="card-code">{preview}</div>
+                  <div className="card-footer">
+                    {snippet.tags.map((tag) => (
+                      <span key={tag} className="tag">
+                        {tag}
+                      </span>
+                    ))}
+                    {snippet.createdAt && (
+                      <span className="card-time">{formatCreatedAt(snippet.createdAt)}</span>
+                    )}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </main>
+
+      {/* DETAIL PANEL */}
+      <aside className="detail">
+        <div className="detail-header">
+          <span className="active-badge">
+            {activeSnippet ? 'Active Snippet' : 'Aucun snippet sélectionné'}
+          </span>
+          <div className="detail-actions">
+            <div className="icon-btn">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+              </svg>
+            </div>
+            <div className="icon-btn">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              >
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14H6L5 6" />
+                <path d="M10 11v6" />
+                <path d="M14 11v6" />
+                <path d="M9 6V4h6v2" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div className="detail-body">
+          {detailMode !== 'view' && draft ? (
+            <form
+              className="edit-form"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void commitDraft()
+              }}
+            >
+              <div className="edit-row">
+                <label>
+                  <span className="edit-label">Name</span>
+                  <input
+                    className="edit-input"
+                    value={draft.name}
+                    onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                  />
+                </label>
+              </div>
+              <div className="edit-row">
+                <label>
+                  <span className="edit-label">Language</span>
+                  <input
+                    className="edit-input"
+                    value={draft.language}
+                    onChange={(e) => setDraft({ ...draft, language: e.target.value })}
+                  />
+                </label>
+              </div>
+              <div className="edit-row">
+                <label>
+                  <span className="edit-label">Tags (séparés par des virgules)</span>
+                  <input
+                    className="edit-input"
+                    value={draft.tags.join(', ')}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        tags: e.target.value.split(',').map((t) => t.trim()),
+                      })
+                    }
+                  />
+                </label>
+              </div>
+              <div className="edit-row">
+                <label>
+                  <span className="edit-label">Description</span>
+                  <input
+                    className="edit-input"
+                    value={draft.description}
+                    onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+                  />
+                </label>
+              </div>
+              <div className="edit-row">
+                <label>
+                  <span className="edit-label">Notes</span>
+                  <textarea
+                    className="edit-textarea"
+                    rows={3}
+                    value={draft.notes ?? ''}
+                    onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
+                  />
+                </label>
+              </div>
+              <div className="edit-row">
+                <label>
+                  <span className="edit-label">Code</span>
+                  <textarea
+                    className="edit-textarea code-textarea"
+                    rows={10}
+                    value={draft.code}
+                    onChange={(e) => setDraft({ ...draft, code: e.target.value })}
+                  />
+                </label>
+              </div>
+              <div className="edit-actions">
+                <button type="button" className="action-btn btn-secondary" onClick={cancelEdit}>
+                  Cancel
+                </button>
+                <button type="submit" className="action-btn btn-primary">
+                  Save Snippet
+                </button>
+              </div>
+            </form>
+          ) : activeSnippet ? (
+            <>
+              <div className="detail-title">{activeSnippet.name}</div>
+              <div className="detail-meta">
+                <span>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  >
+                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                  Created {formatCreatedAt(activeSnippet.createdAt)}
+                </span>
+                <span>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  >
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  {activeSnippet.language}
+                </span>
+              </div>
+
+              <button className="action-btn btn-primary" type="button" onClick={handleCopyActive}>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
+                  <rect x="9" y="9" width="13" height="13" rx="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                Copy Code
+              </button>
+              <button
+                className="action-btn btn-secondary"
+                type="button"
+                onClick={beginEditSnippet}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                Edit Snippet
+              </button>
+
+              <div className="section-head">
+                <span className="section-head-label">Code</span>
+                <span className="lang-badge">{activeSnippet.language}</span>
+              </div>
+
+              <div className="code-block">
+                <pre>
+                  <code>{activeSnippet.code}</code>
+                </pre>
+              </div>
+
+              <div className="section-head" style={{ marginTop: 22 }}>
+                <span className="section-head-label">Tags</span>
+              </div>
+              <div className="tags-wrap">
+                {activeSnippet.tags.map((tag) => (
+                  <span key={tag} className="detail-tag">
+                    {tag}
+                  </span>
+                ))}
+                <div className="add-tag-btn">+</div>
+              </div>
+
+              <div className="section-head" style={{ marginTop: 22 }}>
+                <span className="section-head-label">Notes</span>
+              </div>
+              <div className="notes-text">
+                {activeSnippet.notes || 'Aucune note pour ce snippet pour le moment.'}
+              </div>
+            </>
+          ) : (
+            <div className="status-text">
+              Ajoute ou sélectionne un snippet pour voir les détails.
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {error && <div className="error-banner">{error}</div>}
     </div>
   )
 }
