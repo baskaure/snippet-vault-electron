@@ -2,8 +2,8 @@
 
 ![Bannière du projet ou Logo](assets/banner.png)
 
-## 👥 Auteurs
-* **Aurelien [À compléter]** (Rôle : Desktop & Frontend Dev) - [Lien GitHub à compléter]
+## 👥 Auteur
+* **BRANCO Aurélien** (Rôle : Desktop & Frontend Dev) - https://github.com/baskaure/snippet-vault-electron
 
 ---
 
@@ -24,12 +24,11 @@ L’application se présente comme un lanceur type Spotlight/Raycast : une pet
 
 ## 🎨 Conception & Design
 > Lien vers la maquette complète (Figma ou Penpot).  
-> **[Voir la maquette sur Figma](Lien_Public_Figma_à_compléter)**  
+> **[Voir la maquette sur Figma](https://www.figma.com/design/2ApQHrTrsX9R9WxLLvdubc/snippet?node-id=1-130&t=6MGmYBqtc3iABLJ5-1)**  
 
 L’interface reproduit fidèlement une maquette de type Raycast : sidebar avec filtres, grille de cartes au centre, panneau de détails à droite.  
-Une capture d’écran globale du layout est à placer ici :
 
-![Aperçu UI](assets/screenshot1.png)
+![Aperçu UI](assets/maquette.png)
 
 ## 📐 Architecture & UML
 L’architecture suit une approche **MVVM simplifiée** :
@@ -66,7 +65,7 @@ sequenceDiagram
 * **Framework Desktop :** Electron 33
 * **Frontend :** React 18 + Vite
 * **Styling :** CSS custom (inspiré Raycast/Spotlight)
-* **Outils :** VS Code / Cursor, Git & GitHub, éventuellement Figma/Penpot pour la maquette
+* **Outils :** VS Code / Cursor, Git & GitHub, Figma/Stitch pour la maquette
 
 ---
 
@@ -74,9 +73,9 @@ sequenceDiagram
 > Une image vaut mille mots, une animation en vaut dix mille.  
 > Remplacer les chemins par de vraies captures avant rendu final.
 
-| Écran d'accueil / Recherche | Démo Interaction (Gif) |
+| Écran d'accueil | Démo Interaction (Gif) (pas réussi à faire de gif dsl) |
 | :---: | :---: |
-| ![Accueil](assets/screenshot1.png) | ![Démo](assets/demo.gif) |
+| ![Accueil](assets/ui.png) |
 
 ---
 
@@ -84,8 +83,8 @@ sequenceDiagram
 
 ```bash
 # Cloner le dépôt
-git clone https://github.com/<votre-user>/snippet-vault.git
-cd snippet-vault/snippet-vault-electron
+git clone https://github.com/baskaure/snippet-vault-electron
+cd snippet-vault-electron
 
 # Installer les dépendances
 npm install
@@ -105,10 +104,8 @@ npm run build
 ## 🤖 Section IA & Méthodologie (OBLIGATOIRE)
 
 ### 1. Prompts Utilisés (exemples représentatifs)
-- _"Conçois une UI de gestion de snippets type Raycast / Spotlight en HTML/CSS."_  
 - _"Adapte cette maquette HTML/CSS en composant React fonctionnel."_  
 - _"Comment enregistrer un raccourci clavier global et accéder au presse-papier avec Electron ?"_  
-- _"Aide-moi à structurer une architecture MVVM simple avec Electron + React."_  
 
 ### 2. Modifications Manuelles & Debug
 - Revue manuelle de tout le code généré pour respecter le design exact de la maquette (ajustement des classes CSS, des paddings, de l’alignement).  
@@ -118,7 +115,7 @@ npm run build
 
 ### 3. Répartition Code IA vs Code Humain (approximation honnête)
 - **Boilerplate Electron + Vite + React :** 70–80 % IA (template de base + ajustements).  
-- **Logique Métier (chargement JSON, filtres, favoris, CRUD) :** 70 % IA (première version) puis 30 % retravaillé/corrigé à la main.  
+- **Logique Métier (chargement JSON, filtres, favoris, CRUD) :** 50 % IA (première version) puis 20 % IA 2eme retravaillé/corrigé à la main.  
 - **Interface (UI détaillée Raycast‑like) :** Maquette HTML/CSS fournie puis adaptée en React avec aide IA, ajustée manuellement pour coller au comportement attendu.
 
 ---
