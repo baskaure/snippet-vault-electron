@@ -23,7 +23,7 @@ L’application se présente comme un lanceur type Spotlight/Raycast : une pet
 * [ ] Synchronisation cloud / partage multi‑machines
 
 ## 🎨 Conception & Design
-> Lien vers la maquette complète (Figma ou Penpot).  
+> Lien vers la maquette complète (Figma).  
 > **[Voir la maquette sur Figma](https://www.figma.com/design/2ApQHrTrsX9R9WxLLvdubc/snippet?node-id=1-130&t=6MGmYBqtc3iABLJ5-1)**  
 
 L’interface reproduit fidèlement une maquette de type Raycast : sidebar avec filtres, grille de cartes au centre, panneau de détails à droite.  
@@ -70,8 +70,6 @@ sequenceDiagram
 ---
 
 ## 📸 Démonstration (Screenshots & Gifs)
-> Une image vaut mille mots, une animation en vaut dix mille.  
-> Remplacer les chemins par de vraies captures avant rendu final.
 
 | Écran d'accueil | Démo Interaction (Gif) (pas réussi à faire de gif dsl) |
 | :---: | :---: |
