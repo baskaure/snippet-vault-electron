@@ -13,6 +13,7 @@
 .spotlight-shell {
   width: 100%;
   max-width: 960px;
+  height: 440px;
   display: flex;
   flex-direction: column;
   background: rgba(15, 23, 42, 0.96);
@@ -34,6 +35,22 @@
   border-bottom: 1px solid rgba(51, 65, 85, 0.9);
 }
 
+.search-shell {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(75, 85, 99, 0.9);
+  background: radial-gradient(circle at top left, #0f172a 0, #020617 70%);
+  padding: 4px 8px 4px 10px;
+}
+
+.search-shell:focus-within {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.7);
+}
+
 .app-badge {
   display: inline-flex;
   align-items: center;
@@ -49,11 +66,10 @@
 
 .search-input {
   flex: 1;
-  border-radius: 9999px;
-  border: 1px solid rgba(75, 85, 99, 0.8);
-  background: radial-gradient(circle at top left, #0f172a 0, #020617 65%);
+  border: none;
+  background: transparent;
   color: #f9fafb;
-  padding: 9px 14px;
+  padding: 6px 4px;
   font-size: 0.95rem;
   outline: none;
 }
@@ -63,8 +79,7 @@
 }
 
 .search-input:focus {
-  border-color: #4f46e5;
-  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.6);
+  outline: none;
 }
 
 .shortcut-hint {
@@ -84,10 +99,10 @@
 }
 
 .content {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.1fr);
-  min-height: 260px;
-  max-height: 420px;
 }
 
 .list-pane {

@@ -193,19 +193,24 @@ function App() {
       <div className='spotlight-shell'>
         <header className='spotlight-header'>
           <div className='app-badge'>SV</div>
-          <input
-            autoFocus
-            className='search-input'
-            placeholder='Rechercher un snippet, un tag, un langage…'
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
-          />
-          <div className='shortcut-hint'>
-            <span className='kbd'>Ctrl</span>
-            <span className='kbd'>+</span>
-            <span className='kbd'>Shift</span>
-            <span className='kbd'>S</span>
+          <div className='search-shell'>
+            <span className='search-icon' aria-hidden='true'>
+              ⌕
+            </span>
+            <input
+              autoFocus
+              className='search-input'
+              placeholder='Search snippets, tags, or code…'
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleKeyDown}
+            />
+            <div className='shortcut-hint'>
+              <span className='kbd'>Ctrl</span>
+              <span className='kbd'>+</span>
+              <span className='kbd'>Shift</span>
+              <span className='kbd'>S</span>
+            </div>
           </div>
         </header>
 
