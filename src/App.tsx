@@ -113,6 +113,18 @@ git branch --merged main | egrep -v '(^\\*|main)' | xargs -r git branch -d
 ]
 
 type ViewMode = 'view' | 'edit' | 'new'
+type SidebarFilter = 'all' | 'favorites' | 'recent'
+
+function mapLanguageForHighlight(lang: string): string {
+  const normalized = lang.toLowerCase()
+  if (normalized.includes('typescript') || normalized === 'ts' || normalized.includes('tsx')) return 'typescript'
+  if (normalized.includes('javascript') || normalized === 'js' || normalized.includes('react')) return 'javascript'
+  if (normalized.includes('sql')) return 'sql'
+  if (normalized.includes('css')) return 'css'
+  if (normalized.includes('shell') || normalized.includes('bash')) return 'bash'
+  if (normalized.includes('json')) return 'json'
+  return 'plaintext'
+}
 
 function App() {
   const [query, setQuery] = useState('')
@@ -122,6 +134,8 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('view')
   const [draft, setDraft] = useState<Snippet | null>(null)
+  const [sidebarFilter, setSidebarFilter] = useState<SidebarFilter>('all')
+  const [languageFilter, setLanguageFilter] = useState<string>('all')
 
   useEffect(() => {
     let cancelled = false
@@ -163,15 +177,43 @@ function App() {
     }
   }
 
+  const languages = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const snippet of snippets) {
+      if (!snippet.language) continue
+      const key = snippet.language
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    return Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+  }, [snippets])
+
   const filtered = useMemo(() => {
+    let base = [...snippets]
+
+    if (sidebarFilter === 'favorites') {
+      base = base.filter((s) => s.favorite)
+    } else if (sidebarFilter === 'recent') {
+      base = [...base].sort((a, b) => {
+        const da = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        const db = b.createdAt ? new Date(b.createdAt).getTime() : 0
+        return db - da
+      })
+    }
+
+    if (languageFilter !== 'all') {
+      const target = languageFilter.toLowerCase()
+      base = base.filter((s) => s.language.toLowerCase() === target)
+    }
+
     const q = query.trim().toLowerCase()
-    if (!q) return snippets
-    return snippets.filter((snippet) => {
+    if (!q) return base
+
+    return base.filter((snippet) => {
       const haystack =
         `${snippet.name} ${snippet.description} ${snippet.language} ${snippet.tags.join(' ')}`.toLowerCase()
       return haystack.includes(q)
     })
-  }, [query, snippets])
+  }, [query, snippets, sidebarFilter, languageFilter])
 
   useEffect(() => {
     setSelectedIndex(0)
@@ -204,6 +246,43 @@ function App() {
   }
 
   const activeSnippet = filtered[selectedIndex] ?? filtered[0]
+
+  const highlightedCode = useMemo(() => {
+    if (!activeSnippet) return ''
+    try {
+      const language = activeSnippet.language ? mapLanguageForHighlight(activeSnippet.language) : ''
+      const code = activeSnippet.code ?? ''
+      // Simple "highlighting": indent and escape HTML without external lib
+      const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      if (!language) return escaped
+      // Bold some common keywords by language
+      const kw = language.toLowerCase()
+      if (kw === 'typescript' || kw === 'javascript') {
+        return escaped.replace(
+          /\b(const|let|function|return|async|await|export|import|from)\b/g,
+          '<span class="hljs-keyword">$1</span>',
+        )
+      }
+      if (kw === 'sql') {
+        return escaped.replace(
+          /\b(SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|DELETE|JOIN)\b/gi,
+          '<span class="hljs-keyword">$1</span>',
+        )
+      }
+      if (kw === 'css') {
+        return escaped.replace(
+          /\b(display|flex|justify-content|align-items|background|color)\b/g,
+          '<span class="hljs-attr">$1</span>',
+        )
+      }
+      return escaped
+    } catch {
+      return (activeSnippet.code ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+    }
+  }, [activeSnippet])
 
   const beginNewSnippet = () => {
     const now = new Date().toISOString()
@@ -305,8 +384,64 @@ function App() {
           </div>
         </header>
 
-        <main className='content'>
-          <section className='list-pane' aria-label='Résultats des snippets'>
+        <div className='body-layout'>
+          <aside className='sidebar'>
+            <div className='sidebar-header'>
+              <span className='sidebar-title'>Snippet Vault</span>
+            </div>
+
+            <nav className='sidebar-nav'>
+              <button
+                type='button'
+                className={`nav-item ${sidebarFilter === 'all' ? 'nav-item--active' : ''}`}
+                onClick={() => setSidebarFilter('all')}
+              >
+                <span>Tous les snippets</span>
+              </button>
+              <button
+                type='button'
+                className={`nav-item ${sidebarFilter === 'favorites' ? 'nav-item--active' : ''}`}
+                onClick={() => setSidebarFilter('favorites')}
+              >
+                <span>Favoris</span>
+              </button>
+              <button
+                type='button'
+                className={`nav-item ${sidebarFilter === 'recent' ? 'nav-item--active' : ''}`}
+                onClick={() => setSidebarFilter('recent')}
+              >
+                <span>Récents</span>
+              </button>
+            </nav>
+
+            <div className='sidebar-section'>
+              <div className='sidebar-section-title'>LANGAGES</div>
+              <button
+                type='button'
+                className={`nav-item nav-item--small ${languageFilter === 'all' ? 'nav-item--active' : ''}`}
+                onClick={() => setLanguageFilter('all')}
+              >
+                <span>Tous</span>
+                <span className='badge-count'>{snippets.length}</span>
+              </button>
+              {languages.map(([lang, count]) => (
+                <button
+                  key={lang}
+                  type='button'
+                  className={`nav-item nav-item--small ${
+                    languageFilter === lang ? 'nav-item--active' : ''
+                  }`}
+                  onClick={() => setLanguageFilter(lang)}
+                >
+                  <span>{lang}</span>
+                  <span className='badge-count'>{count}</span>
+                </button>
+              ))}
+            </div>
+          </aside>
+
+          <main className='content'>
+            <section className='list-pane' aria-label='Résultats des snippets'>
             {isLoading && (
               <div className='status-text'>Chargement des snippets…</div>
             )}
@@ -343,9 +478,9 @@ function App() {
                   </button>
                 )
               })}
-          </section>
+            </section>
 
-          <aside className='detail-pane' aria-label='Détail du snippet'>
+            <aside className='detail-pane' aria-label='Détail du snippet'>
             {viewMode === 'view' && activeSnippet && (
               <>
                 <div className='detail-header'>
@@ -366,7 +501,10 @@ function App() {
                 </div>
                 <div className='code-block'>
                   <pre>
-                    <code>{activeSnippet.code}</code>
+                    <code
+                      className='hljs'
+                      dangerouslySetInnerHTML={{ __html: highlightedCode || activeSnippet.code }}
+                    />
                   </pre>
                 </div>
                 {activeSnippet.notes && (
@@ -466,12 +604,21 @@ function App() {
             )}
           </aside>
         </main>
+        </div>
 
         <footer className='footer'>
           <div className='footer-left'>
             <button type='button' className='btn-primary' onClick={beginNewSnippet}>
               + Nouveau snippet
             </button>
+          </div>
+          <div className='footer-center'>
+            <span className='kbd'>Entrée</span>
+            <span className='footer-hint-text'>Copier</span>
+            <span className='kbd'>↑↓</span>
+            <span className='footer-hint-text'>Naviguer</span>
+            <span className='kbd'>Esc</span>
+            <span className='footer-hint-text'>Fermer</span>
           </div>
           <span className='footer-status'>
             <span className='status-dot' />
