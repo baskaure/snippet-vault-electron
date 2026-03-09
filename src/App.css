@@ -90,6 +90,10 @@ body {
   border: 1px solid var(--border); border-radius: 5px;
   padding: 1px 7px; font-size: 11px; color: var(--text-muted); font-weight: 600;
 }
+.lang-item.active {
+  background: var(--bg-card-active);
+  color: var(--text-primary);
+}
 .new-btn {
   margin: auto 16px 0;
   background: var(--accent-blue); color: #fff; border: none;

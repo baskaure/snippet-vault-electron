@@ -1,18 +1,5 @@
 [
   {
-    "id": "1456f7b2-12d9-4d51-a65b-5eeb1168018e",
-    "name": "test",
-    "description": "snippet test",
-    "language": "java",
-    "tags": [
-      "test"
-    ],
-    "code": "yfguygy\njgvjvk\nbik",
-    "createdAt": "2026-03-09T14:32:31.603Z",
-    "favorite": false,
-    "notes": "nmozjenfjznfjznefjzefnfkjzen\nfjenzmlkeznlk\nkmejznk\n"
-  },
-  {
     "id": "react-fetch-hook",
     "name": "React Fetch Hook",
     "description": "Hook React pour gérer fetch avec chargement et erreur.",

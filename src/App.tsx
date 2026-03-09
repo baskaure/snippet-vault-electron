@@ -183,10 +183,9 @@ function App() {
     }
   }
 
-  const toggleFavorite = async () => {
-    if (!activeSnippet) return
+  const toggleFavorite = async (id: string) => {
     const updated = snippets.map((s) =>
-      s.id === activeSnippet.id ? { ...s, favorite: !s.favorite } : s,
+      s.id === id ? { ...s, favorite: !s.favorite } : s,
     )
     await persistSnippets(updated)
   }
@@ -194,7 +193,7 @@ function App() {
   const beginNewSnippet = () => {
     const now = new Date().toISOString()
     const base: Snippet = {
-      id: globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `${Date.now()}`,
+      id: `${Date.now()}`,
       name: '',
       description: '',
       language: '',
@@ -245,6 +244,19 @@ function App() {
 
     await persistSnippets(next)
     setActiveId(cleaned.id)
+    setDetailMode('view')
+    setDraft(null)
+  }
+
+  const deleteActiveSnippet = async () => {
+    if (!activeSnippet) return
+    const next = snippets.filter((s) => s.id !== activeSnippet.id)
+    await persistSnippets(next)
+    if (next.length > 0) {
+      setActiveId(next[0].id)
+    } else {
+      setActiveId(null)
+    }
     setDetailMode('view')
     setDraft(null)
   }
@@ -445,8 +457,7 @@ function App() {
                       className={`star-btn ${snippet.favorite ? 'starred' : ''}`}
                       onClick={(e) => {
                         e.stopPropagation()
-                        setActiveId(snippet.id)
-                        void toggleFavorite()
+                        void toggleFavorite(snippet.id)
                       }}
                     >
                       <svg
@@ -484,22 +495,12 @@ function App() {
             {activeSnippet ? 'Active Snippet' : 'Aucun snippet sélectionné'}
           </span>
           <div className="detail-actions">
-            <div className="icon-btn">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              >
-                <circle cx="18" cy="5" r="3" />
-                <circle cx="6" cy="12" r="3" />
-                <circle cx="18" cy="19" r="3" />
-                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-              </svg>
-            </div>
-            <div className="icon-btn">
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={deleteActiveSnippet}
+              title="Supprimer le snippet"
+            >
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
@@ -513,7 +514,7 @@ function App() {
                 <path d="M14 11v6" />
                 <path d="M9 6V4h6v2" />
               </svg>
-            </div>
+            </button>
           </div>
         </div>
 
