@@ -59,6 +59,7 @@ function App() {
   const [error, setError] = useState<string | null>(null)
   const [detailMode, setDetailMode] = useState<DetailMode>('view')
   const [draft, setDraft] = useState<Snippet | null>(null)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -138,8 +139,29 @@ function App() {
       })
     }
 
+    // Filtres avancés
     if (topFilter === 'untagged') {
       base = base.filter((s) => !s.tags || s.tags.length === 0)
+    } else if (topFilter === 'shared') {
+      base = base.filter((s) =>
+        (s.tags ?? []).some((tag) => {
+          const t = tag.toLowerCase()
+          return t === 'shared' || t === 'share'
+        }),
+      )
+    } else if (topFilter === 'personal') {
+      base = base.filter((s) =>
+        !(s.tags ?? []).some((tag) => {
+          const t = tag.toLowerCase()
+          return t === 'shared' || t === 'share'
+        }),
+      )
+    } else if (topFilter === 'latest') {
+      base = [...base].sort((a, b) => {
+        const da = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        const db = b.createdAt ? new Date(b.createdAt).getTime() : 0
+        return db - da
+      })
     }
 
     return base
@@ -160,13 +182,25 @@ function App() {
     setActiveId((prev) => prev ?? activeSnippet.id)
   }, [activeSnippet])
 
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type })
+  }
+
+  useEffect(() => {
+    if (!toast) return
+    const id = window.setTimeout(() => setToast(null), 2500)
+    return () => window.clearTimeout(id)
+  }, [toast])
+
   const handleCopyActive = async () => {
     if (!activeSnippet) return
     try {
       await window.ipcRenderer.invoke('copy-snippet-to-clipboard', activeSnippet.code)
+      showToast('Snippet copié dans le presse-papier')
     } catch (err) {
       console.error('Erreur lors de la copie du snippet', err)
       setError("Impossible de copier dans le presse-papier.")
+      showToast("Impossible de copier dans le presse-papier.", 'error')
     }
   }
 
@@ -225,6 +259,7 @@ function App() {
       s.id === id ? { ...s, favorite: !s.favorite } : s,
     )
     await persistSnippets(updated)
+    showToast('État favori mis à jour')
   }
 
   const beginNewSnippet = () => {
@@ -268,7 +303,9 @@ function App() {
     }
 
     if (!cleaned.name || !cleaned.code) {
-      setError('Nom et code sont obligatoires pour un snippet.')
+      const msg = 'Nom et code sont obligatoires pour un snippet.'
+      setError(msg)
+      showToast(msg, 'error')
       return
     }
 
@@ -283,6 +320,7 @@ function App() {
     setActiveId(cleaned.id)
     setDetailMode('view')
     setDraft(null)
+    showToast(detailMode === 'new' ? 'Snippet créé' : 'Snippet mis à jour')
   }
 
   const deleteActiveSnippet = async () => {
@@ -298,6 +336,7 @@ function App() {
     }
     setDetailMode('view')
     setDraft(null)
+    showToast('Snippet supprimé')
   }
 
   return (
@@ -745,6 +784,11 @@ function App() {
       </aside>
 
       {error && <div className="error-banner">{error}</div>}
+      {toast && (
+        <div className={`toast ${toast.type === 'error' ? 'toast-error' : 'toast-success'}`}>
+          {toast.message}
+        </div>
+      )}
     </div>
   )
 }
