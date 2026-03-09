@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, ipcMain } from 'electron'
+import { app, BrowserWindow, shell, ipcMain, globalShortcut, clipboard } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -45,7 +45,14 @@ const indexHtml = path.join(RENDERER_DIST, 'index.html')
 
 async function createWindow() {
   win = new BrowserWindow({
-    title: 'Main window',
+    title: 'Snippet Vault',
+    width: 980,
+    height: 520,
+    minWidth: 880,
+    minHeight: 440,
+    show: false,
+    center: true,
+    backgroundColor: '#020617',
     icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
     webPreferences: {
       preload,
@@ -56,6 +63,10 @@ async function createWindow() {
       // Read more on https://www.electronjs.org/docs/latest/tutorial/context-isolation
       // contextIsolation: false,
     },
+  })
+
+  win.on('ready-to-show', () => {
+    win?.show()
   })
 
   if (VITE_DEV_SERVER_URL) { // #298
@@ -81,7 +92,54 @@ async function createWindow() {
   update(win)
 }
 
-app.whenReady().then(createWindow)
+async function registerShortcuts() {
+  if (!win) return
+
+  const ok = globalShortcut.register('CommandOrControl+Shift+S', () => {
+    if (!win) return
+    if (win.isVisible() && win.isFocused()) {
+      win.hide()
+    } else {
+      win.show()
+      win.focus()
+    }
+  })
+
+  if (!ok) {
+    // eslint-disable-next-line no-console
+    console.warn('Impossible d’enregistrer le raccourci global Ctrl+Shift+S')
+  }
+}
+
+ipcMain.handle('get-snippets', async () => {
+  const fs = await import('node:fs/promises')
+  const snippetsPath = path.join(process.env.APP_ROOT, 'snippets.json')
+  try {
+    const raw = await fs.readFile(snippetsPath, 'utf-8')
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) return parsed
+    return []
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Erreur lors de la lecture du fichier snippets.json', error)
+    return []
+  }
+})
+
+ipcMain.handle('copy-snippet-to-clipboard', (_, code: string) => {
+  clipboard.writeText(code ?? '')
+})
+
+ipcMain.on('hide-window', () => {
+  if (win) {
+    win.hide()
+  }
+})
+
+app.whenReady().then(async () => {
+  await createWindow()
+  await registerShortcuts()
+})
 
 app.on('window-all-closed', () => {
   win = null
@@ -94,6 +152,10 @@ app.on('second-instance', () => {
     if (win.isMinimized()) win.restore()
     win.focus()
   }
+})
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
 })
 
 app.on('activate', () => {
